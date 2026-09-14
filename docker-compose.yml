@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # ─── MySQL Database ───────────────────────────────────────────
+  db:
+    image: mysql:8.0
+    container_name: htttdn_db
+    restart: always
+    environment:
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql                          # Lưu dữ liệu persistent
+      - ./database/migrations:/docker-entrypoint-initdb.d  # Auto chạy SQL khi khởi tạo
+    networks:
+      - htttdn_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── FastAPI Backend ──────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: htttdn_backend
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app                                     # Hot-reload khi dev
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - htttdn_network
+
+  # ─── React Frontend ───────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: htttdn_frontend
+    restart: always
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - htttdn_network
+
+# ─── Volumes (lưu dữ liệu MySQL) ──────────────────────────────
+volumes:
+  mysql_data:
+    driver: local
+
+# ─── Network ──────────────────────────────────────────────────
+networks:
+  htttdn_network:
+    driver: bridge
